@@ -24,34 +24,59 @@ function App() {
   const [entryText, setEntryText] = useState('')
   const [entryCaloriesIn, setEntryCaloriesIn] = useState('')
   const [entryCaloriesOut, setEntryCaloriesOut] = useState('')
+  const [entryProtein, setEntryProtein] = useState('')
+  const [entryCarbs, setEntryCarbs] = useState('')
+  const [entryFat, setEntryFat] = useState('')
+  const [entryVitamins, setEntryVitamins] = useState('')
 
   const [weightDate, setWeightDate] = useState(todayString())
   const [weightValue, setWeightValue] = useState('')
   const [dateRange, setDateRange] = useState('all')
   const [loadingInitial, setLoadingInitial] = useState(true)
   const [error, setError] = useState('')
+  const [activeTab, setActiveTab] = useState('stats')
+  const [profile, setProfile] = useState({ calorieBudget: 0, proteinTarget: 0 })
+  const [presets, setPresets] = useState([])
+  const [presetName, setPresetName] = useState('')
+  const [presetPortion, setPresetPortion] = useState('')
+  const [presetCaloriesIn, setPresetCaloriesIn] = useState('')
+  const [presetProtein, setPresetProtein] = useState('')
+  const [presetCarbs, setPresetCarbs] = useState('')
+  const [presetFat, setPresetFat] = useState('')
+  const [presetVitamins, setPresetVitamins] = useState('')
 
   useEffect(() => {
     async function loadAll() {
       try {
         setError('')
         const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
-        const [entriesRes, weightsRes] = await Promise.all([
+        const [entriesRes, weightsRes, profileRes, presetsRes] = await Promise.all([
           fetch(`${baseUrl}/api/entries`),
           fetch(`${baseUrl}/api/weights`),
+          fetch(`${baseUrl}/api/profile`),
+          fetch(`${baseUrl}/api/presets`),
         ])
 
-        if (!entriesRes.ok || !weightsRes.ok) {
+        if (!entriesRes.ok || !weightsRes.ok || !profileRes.ok || !presetsRes.ok) {
           throw new Error('Failed to load data from API')
         }
 
-        const [entriesData, weightsData] = await Promise.all([
+        const [entriesData, weightsData, profileData, presetsData] = await Promise.all([
           entriesRes.json(),
           weightsRes.json(),
+          profileRes.json(),
+          presetsRes.json(),
         ])
 
         setEntries(Array.isArray(entriesData) ? entriesData : [])
         setWeights(Array.isArray(weightsData) ? weightsData : [])
+        if (profileData && typeof profileData === 'object') {
+          setProfile({
+            calorieBudget: Number(profileData.calorieBudget) || 0,
+            proteinTarget: Number(profileData.proteinTarget) || 0,
+          })
+        }
+        setPresets(Array.isArray(presetsData) ? presetsData : [])
       } catch (err) {
         setError(err.message || 'Failed to load from API')
       } finally {
@@ -66,11 +91,22 @@ function App() {
     const map = {}
     for (const e of entries) {
       if (!map[e.date]) {
-        map[e.date] = { date: e.date, in: 0, out: 0, net: 0 }
+        map[e.date] = {
+          date: e.date,
+          in: 0,
+          out: 0,
+          net: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+        }
       }
       map[e.date].in += e.caloriesIn || 0
       map[e.date].out += e.caloriesOut || 0
       map[e.date].net = map[e.date].in - map[e.date].out
+      map[e.date].protein += e.protein || 0
+      map[e.date].carbs += e.carbs || 0
+      map[e.date].fat += e.fat || 0
     }
     return Object.values(map).sort((a, b) => a.date.localeCompare(b.date))
   }, [entries])
@@ -104,6 +140,9 @@ function App() {
       todayIn: todayRow?.in || 0,
       todayOut: todayRow?.out || 0,
       todayNet: todayRow?.net || 0,
+      todayProtein: todayRow?.protein || 0,
+      todayCarbs: todayRow?.carbs || 0,
+      todayFat: todayRow?.fat || 0,
       latestWeight: latestWeight?.weight ?? null,
       deltaWeight:
         latestWeight && firstWeight
@@ -122,6 +161,9 @@ function App() {
 
     const caloriesInNumber = Number(entryCaloriesIn) || 0
     const caloriesOutNumber = Number(entryCaloriesOut) || 0
+    const proteinNumber = Number(entryProtein) || 0
+    const carbsNumber = Number(entryCarbs) || 0
+    const fatNumber = Number(entryFat) || 0
     try {
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
       const responseSave = await fetch(`${baseUrl}/api/entries`, {
@@ -133,6 +175,10 @@ function App() {
           text: entryText.trim(),
           caloriesIn: caloriesInNumber,
           caloriesOut: caloriesOutNumber,
+          protein: proteinNumber,
+          carbs: carbsNumber,
+          fat: fatNumber,
+          vitaminText: entryVitamins.trim(),
           explanation: entryText.trim(),
         }),
       })
@@ -147,6 +193,10 @@ function App() {
       setEntryText('')
       setEntryCaloriesIn('')
       setEntryCaloriesOut('')
+      setEntryProtein('')
+      setEntryCarbs('')
+      setEntryFat('')
+      setEntryVitamins('')
     } catch (err) {
       setError(err.message || 'Failed to save entry')
     }
@@ -191,9 +241,27 @@ function App() {
     <div className="app-root">
       <h1>Weight & Calorie Tracker</h1>
 
+      <div className="tabs">
+        <button
+          type="button"
+          className={activeTab === 'stats' ? 'tab active' : 'tab'}
+          onClick={() => setActiveTab('stats')}
+        >
+          Stats
+        </button>
+        <button
+          type="button"
+          className={activeTab === 'log' ? 'tab active' : 'tab'}
+          onClick={() => setActiveTab('log')}
+        >
+          Log & Settings
+        </button>
+      </div>
+
       {loadingInitial && <p className="empty">Loading data…</p>}
 
-      <section className="summary">
+      {activeTab === 'stats' && (
+        <section className="summary">
         <div className="summary-header">
           <h2>Today</h2>
           <select
@@ -235,15 +303,34 @@ function App() {
                 : '—'}
             </div>
           </div>
+          <div>
+            <div className="summary-label">Protein today</div>
+            <div className="summary-value">
+              {todaySummary.todayProtein}
+              {profile.proteinTarget
+                ? ` / ${profile.proteinTarget} g`
+                : ' g'}
+            </div>
+          </div>
+          <div>
+            <div className="summary-label">Carbs today</div>
+            <div className="summary-value">{todaySummary.todayCarbs} g</div>
+          </div>
+          <div>
+            <div className="summary-label">Fat today</div>
+            <div className="summary-value">{todaySummary.todayFat} g</div>
+          </div>
         </div>
       </section>
+      )}
 
       {error && <div className="error">{error}</div>}
 
-      <section className="forms">
-        <div className="card">
-          <h2>Log food or activity</h2>
-          <form onSubmit={handleAddEntry} className="form">
+      {activeTab === 'log' && (
+        <section className="forms">
+          <div className="card">
+            <h2>Log food or activity</h2>
+            <form onSubmit={handleAddEntry} className="form">
             <label>
               Date
               <input
@@ -289,7 +376,145 @@ function App() {
                 placeholder="e.g. 200"
               />
             </label>
+            <label>
+              Protein (g)
+              <input
+                type="number"
+                value={entryProtein}
+                onChange={(e) => setEntryProtein(e.target.value)}
+                placeholder="e.g. 30"
+              />
+            </label>
+            <label>
+              Carbs (g)
+              <input
+                type="number"
+                value={entryCarbs}
+                onChange={(e) => setEntryCarbs(e.target.value)}
+                placeholder="e.g. 40"
+              />
+            </label>
+            <label>
+              Fat (g)
+              <input
+                type="number"
+                value={entryFat}
+                onChange={(e) => setEntryFat(e.target.value)}
+                placeholder="e.g. 10"
+              />
+            </label>
+            <label>
+              Vitamins (optional note)
+              <textarea
+                rows={2}
+                value={entryVitamins}
+                onChange={(e) => setEntryVitamins(e.target.value)}
+                placeholder="e.g. C: 75mg; D: 10µg"
+              />
+            </label>
             <button type="submit">Save entry</button>
+          </form>
+        </div>
+
+        <div className="card">
+          <h2>Food presets</h2>
+          {presets.length === 0 ? (
+            <p className="empty">No presets yet. Create one below.</p>
+          ) : (
+            <ul className="preset-list">
+              {presets.map((p) => (
+                <li key={p._id} className="preset-item">
+                  <div className="preset-main">
+                    <span className="preset-name">{p.name}</span>
+                    {p.defaultPortion ? (
+                      <span className="preset-portion">
+                        ({p.defaultPortion} g/serving)
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="preset-meta">
+                    <span>{p.caloriesIn || 0} kcal</span>
+                    <span>{p.protein || 0} g protein</span>
+                    <span>{p.carbs || 0} g carbs</span>
+                    <span>{p.fat || 0} g fat</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="small-button"
+                    onClick={() => applyPreset(p)}
+                  >
+                    Use preset
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form onSubmit={handleSavePreset} className="form preset-form">
+            <label>
+              Name
+              <input
+                type="text"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                placeholder="e.g. Oats with whey"
+              />
+            </label>
+            <label>
+              Default portion (g or serving)
+              <input
+                type="number"
+                value={presetPortion}
+                onChange={(e) => setPresetPortion(e.target.value)}
+                placeholder="e.g. 100"
+              />
+            </label>
+            <label>
+              Calories in
+              <input
+                type="number"
+                value={presetCaloriesIn}
+                onChange={(e) => setPresetCaloriesIn(e.target.value)}
+                placeholder="e.g. 450"
+              />
+            </label>
+            <label>
+              Protein (g)
+              <input
+                type="number"
+                value={presetProtein}
+                onChange={(e) => setPresetProtein(e.target.value)}
+                placeholder="e.g. 35"
+              />
+            </label>
+            <label>
+              Carbs (g)
+              <input
+                type="number"
+                value={presetCarbs}
+                onChange={(e) => setPresetCarbs(e.target.value)}
+                placeholder="e.g. 50"
+              />
+            </label>
+            <label>
+              Fat (g)
+              <input
+                type="number"
+                value={presetFat}
+                onChange={(e) => setPresetFat(e.target.value)}
+                placeholder="e.g. 12"
+              />
+            </label>
+            <label>
+              Vitamins (optional note)
+              <textarea
+                rows={2}
+                value={presetVitamins}
+                onChange={(e) => setPresetVitamins(e.target.value)}
+                placeholder="e.g. C: 75mg; D: 10µg"
+              />
+            </label>
+            <button type="submit">Save preset</button>
           </form>
         </div>
 
@@ -317,7 +542,37 @@ function App() {
             <button type="submit">Save weight</button>
           </form>
         </div>
+
+        <div className="card">
+          <h2>Profile & goals</h2>
+          <form onSubmit={handleSaveProfile} className="form">
+            <label>
+              Daily calorie budget
+              <input
+                type="number"
+                value={profile.calorieBudget}
+                onChange={(e) =>
+                  setProfile((p) => ({ ...p, calorieBudget: e.target.value }))
+                }
+                placeholder="e.g. 2200"
+              />
+            </label>
+            <label>
+              Daily protein target (g)
+              <input
+                type="number"
+                value={profile.proteinTarget}
+                onChange={(e) =>
+                  setProfile((p) => ({ ...p, proteinTarget: e.target.value }))
+                }
+                placeholder="e.g. 160"
+              />
+            </label>
+            <button type="submit">Save profile</button>
+          </form>
+        </div>
       </section>
+      )}
 
       <section className="charts">
         <div className="card">
@@ -391,9 +646,21 @@ function App() {
                   <div className="entry-meta">
                     <span>In: {e.caloriesIn}</span>
                     <span>Out: {e.caloriesOut}</span>
+                    {typeof e.protein === 'number' && e.protein > 0 && (
+                      <span>Protein: {e.protein} g</span>
+                    )}
+                    {typeof e.carbs === 'number' && e.carbs > 0 && (
+                      <span>Carbs: {e.carbs} g</span>
+                    )}
+                    {typeof e.fat === 'number' && e.fat > 0 && (
+                      <span>Fat: {e.fat} g</span>
+                    )}
                   </div>
                   {e.explanation && (
                     <div className="entry-explanation">{e.explanation}</div>
+                  )}
+                  {e.vitaminText && (
+                    <div className="entry-explanation">Vitamins: {e.vitaminText}</div>
                   )}
                 </li>
               ))}
